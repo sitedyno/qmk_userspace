@@ -1,7 +1,9 @@
+#include "action.h"
 #include "cyboard.h"
 #include "keyboard.h"
 #include "keycodes.h"
 #include "keymap_us.h"
+#include "matrix.h"
 #include "pointing_device.h"
 #include "pointing_device_auto_mouse.h"
 #include "quantum.h"
@@ -10,13 +12,23 @@
 #include "send_string_keycodes.h"
 #include "sensors/pmw3360.h"
 #include "sensors/pmw33xx_common.h"
+#include "timer.h"
 #include QMK_KEYBOARD_H
 #include "users/sitedyno/sitedyno.h"
 
 enum custom_keycodes {
     DBL_TAP = SAFE_RANGE,
-    TRI_TAP
+    TRI_TAP,
+    RPT_KEY_V,
+    RPT_KEY_X,
+    RPT_SPACE,
+    DO_NOT_USE
 };
+
+bool repeat_active = false;
+int last_key_code = DO_NOT_USE;
+static uint16_t key_timer;
+static uint16_t repeat_delay = 100;
 
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -96,8 +108,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_GRV,  KC_1,    KC_2,    KC_3,  KC_4,   KC_5,                                                             KC_6,  KC_7,   KC_8,    KC_9,     KC_0,    KC_MINS,
         KC_TAB,  KC_Q,    KC_W,    KC_E,  KC_R,   KC_T,                                                             KC_Y,  KC_U,   KC_I,    KC_O,     KC_P,    KC_BSLS,
         KC_PLUS, KC_A,    KC_S,    KC_D,  KC_F,   KC_G,                                                             KC_H,  KC_J,   KC_K,    KC_L,     KC_QUOT, KC_SCLN,
-        KC_LSFT, KC_Z,    KC_X,    KC_C,  KC_V,   KC_B,                                                             KC_N,  KC_M,   KC_COMM, KC_DOT,   KC_SLSH, KC_RSFT,
-        KC_LGUI, KC_LBRC, KC_DOWN, KC_UP, KC_F12,   LCTL_T(KC_ESC), KC_SPC,  LALT_T(KC_TAB),/**/KC_ENT,  KC_BSPC, KC_DEL,  KC_INS, KC_LEFT, KC_RIGHT, KC_LBRC, TO(0),
+        KC_LSFT, KC_Z,    RPT_KEY_X,    KC_C,  RPT_KEY_V,   KC_B,                                                             KC_N,  KC_M,   KC_COMM, KC_DOT,   KC_SLSH, KC_RSFT,
+        KC_LGUI, KC_LBRC, KC_DOWN, KC_UP, KC_F12,   LCTL_T(KC_ESC), RPT_SPACE,  LALT_T(KC_TAB),/**/KC_ENT,  KC_BSPC, KC_DEL,  KC_INS, KC_LEFT, KC_RIGHT, KC_LBRC, TO(0),
                                                     _______,        _______, _______,/**/       _______, _______, _______
     ),
 
@@ -124,7 +136,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 //clang-format on
 
 void keyboard_post_init_user(void) {
-    // debug_enable = true;
+    debug_enable = true;
     // debug_matrix=true;
     // debug_keyboard=true;
     // debug_mouse=true;
@@ -148,7 +160,22 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     return false;
 }
 
+void send_rpt_string(char key) {
+    switch (key) {
+        case 'v':
+            SEND_STRING(SS_DOWN(X_V) SS_DELAY(75) SS_UP(X_V));
+        break;
+        case 'x':
+            SEND_STRING(SS_DOWN(X_X) SS_DELAY(75) SS_UP(X_X));
+        break;
+        case '_':
+            SEND_STRING(SS_DOWN(X_SPACE) SS_DELAY(75) SS_UP(X_SPACE));
+        break;
+    }
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // uprintf("KL: kc: 0x%04X, col: %2u, row: %2u, pressed: %u, time: %5u, int: %u, count: %u\n", keycode, record->event.key.col, record->event.key.row, record->event.pressed, record->event.time, record->tap.interrupted, record->tap.count);
     switch (keycode) {
         case DBL_TAP:
             if (record->event.pressed) {
@@ -160,8 +187,55 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 SEND_STRING(SS_TAP(X_BTN1) SS_DELAY(100) SS_TAP(X_BTN1) SS_DELAY(100) SS_TAP(X_BTN1));
             }
         break;
+        case RPT_KEY_V:
+            if (record->event.pressed) {
+                send_rpt_string('v');
+                repeat_active = true;
+                last_key_code = KC_V;
+                key_timer = timer_read();
+            } else {
+                repeat_active = false;
+            }
+        break;
+        case RPT_KEY_X:
+            if (record->event.pressed) {
+                send_rpt_string('x');
+                repeat_active = true;
+                last_key_code = KC_X;
+                key_timer = timer_read();
+            } else {
+                repeat_active = false;
+            }
+        break;
+        case RPT_SPACE:
+            if (record->event.pressed) {
+                send_rpt_string('_');
+                repeat_active = true;
+                last_key_code = KC_SPACE;
+                key_timer = timer_read();
+            } else {
+                repeat_active = false;
+            }
+        break;
     }
     return true;
+}
+
+void matrix_scan_user() {
+    if ((repeat_active) && (timer_elapsed(key_timer) > repeat_delay)) {
+        switch (last_key_code) {
+            case KC_V:
+                send_rpt_string('v');
+            break;
+            case KC_X:
+                send_rpt_string('x');
+            break;
+            case KC_SPACE:
+                send_rpt_string('_');
+            break;
+        }
+        key_timer = timer_read();
+    }
 }
 
 bool is_mouse_record_user(uint16_t keycode, keyrecord_t *record) {
