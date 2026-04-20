@@ -1,4 +1,5 @@
 #include "sitedyno.h"
+#include "caps_word.h"
 #include "color.h"
 
 rgb_t sd_limited_rgb_from_hsv(uint8_t hue, uint8_t sat, uint8_t val) {
@@ -10,7 +11,7 @@ rgb_t sd_limited_rgb_from_hsv(uint8_t hue, uint8_t sat, uint8_t val) {
 }
 
 void sd_capslock_warning(uint8_t led_min, uint8_t led_max) {
-    if (host_keyboard_led_state().caps_lock) {
+    if (host_keyboard_led_state().caps_lock || is_caps_word_on()) {
         // uprintf("%d\n", rgb_matrix_get_val());
         for (uint8_t i = led_min; i < led_max; i++) {
             if (g_led_config.flags[i] & LED_FLAG_KEYLIGHT) {
