@@ -1,6 +1,6 @@
-#include "sitedyno.h"
 #include "caps_word.h"
 #include "color.h"
+#include "users/sitedyno/sitedyno.h"
 
 rgb_t sd_limited_rgb_from_hsv(uint8_t hue, uint8_t sat, uint8_t val) {
     if (val > rgb_matrix_get_val()) {
